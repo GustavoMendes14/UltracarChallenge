@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Ultracar API - Debug HTTP",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-api-debug",
+      "program": "${workspaceFolder}/src/UltracarInventoryApi/bin/Debug/net10.0/UltracarInventoryApi.dll",
+      "cwd": "${workspaceFolder}/src/UltracarInventoryApi",
+      "launchSettingsFilePath": "${workspaceFolder}/src/UltracarInventoryApi/Properties/launchSettings.json",
+      "launchSettingsProfile": "http",
+      "stopAtEntry": false,
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart",
+      "justMyCode": true
+    },
+    {
+      "name": "Ultracar API - Debug HTTPS",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-api-debug",
+      "program": "${workspaceFolder}/src/UltracarInventoryApi/bin/Debug/net10.0/UltracarInventoryApi.dll",
+      "cwd": "${workspaceFolder}/src/UltracarInventoryApi",
+      "launchSettingsFilePath": "${workspaceFolder}/src/UltracarInventoryApi/Properties/launchSettings.json",
+      "launchSettingsProfile": "https",
+      "stopAtEntry": false,
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart",
+      "justMyCode": true
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "dotnet.defaultSolution": "UltracarChallenge.slnx",
+  "dotnet.testWindow.disableAutoDiscovery": false,
+  "dotnet-test-explorer.testProjectPath": "src/Tests/**/*Tests.csproj"
+}

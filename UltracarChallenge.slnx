@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="src/UltracarInventoryApi/UltracarInventoryApi.csproj" />
+  <Folder Name="/Tests/">
+    <Project Path="src/Tests/UnitTests/UltracarInventoryApi.UnitTests.csproj" />
+    <Project Path="src/Tests/IntegrationTests/UltracarInventoryApi.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
