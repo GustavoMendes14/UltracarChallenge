@@ -1,0 +1,21 @@
+{
+  "RunLabel": "automation-validation",
+  "StartedAtUtc": "2026-11-19T19:17:23.9677525+00:00",
+  "FinishedAtUtc": "2026-11-19T19:21:00.1622877+00:00",
+  "BaseUrl": "http://127.0.0.1:32789/",
+  "PostgresImage": "postgres:17",
+  "ApiBuild": "Dockerfile / Release / Production",
+  "Endpoint": "/api/v1/pecas?busca=",
+  "Users": 20,
+  "Workshops": 50,
+  "WarmUpSeconds": 30,
+  "MeasurementSeconds": 180,
+  "SuccessfulRequests": 1393728,
+  "FailedRequests": 0,
+  "Rps": 7742.93,
+  "P95Ms": 3.92,
+  "Passed": true,
+  "Runtime": ".NET 10.0.15",
+  "OperatingSystem": "Ubuntu 24.04.5 LTS",
+  "LogicalProcessors": 32
+}

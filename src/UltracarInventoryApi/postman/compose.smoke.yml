@@ -1,0 +1,46 @@
+name: ultracar-smoke
+
+x-api: &api
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  image: ultracar-smoke-api:local
+  environment:
+    ASPNETCORE_ENVIRONMENT: Development
+    ASPNETCORE_HTTP_PORTS: "8080"
+    ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=ultracar_smoke;Username=ultracar_smoke;Password=smoke-local-password"
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ultracar_smoke
+      POSTGRES_USER: ultracar_smoke
+      POSTGRES_PASSWORD: smoke-local-password
+    ports:
+      - "127.0.0.1:15433:5432"
+    volumes:
+      - smoke_data:/var/lib/postgresql/data
+      - ./setup/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+      - ./setup/reset.sql:/docker-entrypoint-initdb.d/002-reset.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ultracar_smoke -d ultracar_smoke"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api1:
+    <<: *api
+    ports:
+      - "127.0.0.1:15087:8080"
+
+  api2:
+    <<: *api
+    ports:
+      - "127.0.0.1:15088:8080"
+
+volumes:
+  smoke_data:

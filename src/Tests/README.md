@@ -1,5 +1,5 @@
 # Testes
-Os projetos são separados e cada um referencia diretamente a API:
+Os projetos são separados. Unitários e integração referenciam a API; desempenho usa HTTP real:
 
 ```text
 Tests/
@@ -98,3 +98,26 @@ versionado na API, esse arquivo deve acompanhar mudanças no esquema.
 
 Este cenário cobre R2. Os demais cenários de integração, como expiração de
 reservas e o filtro SQL de reservas ativas, continuam fora deste teste.
+
+## Testes de desempenho — D1, D2 e D3
+
+O projeto `PerformanceTests/UltracarInventoryApi.PerformanceTests.csproj` usa
+xUnit, Testcontainers e NBomber, sem referência à API. Com ativação explícita,
+ele cria PostgreSQL e API temporários, aplica schema e seed D1, captura EXPLAIN,
+executa 20 usuários por HTTP real e remove os recursos no final, inclusive em falhas.
+URL e credenciais são geradas automaticamente; os relatórios são preservados.
+
+Na pasta `src`, com Docker Linux em execução, pelo Bash/WSL:
+
+```sh
+RUN_PERFORMANCE_TESTS=1 dotnet test Tests/PerformanceTests/UltracarInventoryApi.PerformanceTests.csproj \
+  -c Release --filter 'Category=Performance' --logger 'console;verbosity=detailed'
+```
+
+Sem `RUN_PERFORMANCE_TESTS=1`, o teste de carga fica ignorado e somente as
+verificações leves do cliente rodam. Não é necessário subir o Docker Compose.
+
+Pré-requisitos e comandos PowerShell:
+[README de desempenho](PerformanceTests/README.md).
+Cenário e resultados:
+[DESEMPENHO.md](../UltracarInventoryApi/DESEMPENHO.md).

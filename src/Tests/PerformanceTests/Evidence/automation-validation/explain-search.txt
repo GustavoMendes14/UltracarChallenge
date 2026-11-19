@@ -1,0 +1,104 @@
+PREPARE
+Busca vazia / primeira pagina / 21 registros para decidir nextCursor
+                                                                                                  QUERY PLAN                                                                                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop  (cost=35.66..324.49 rows=21 width=92) (actual time=0.076..0.225 rows=21 loops=1)
+   Output: p.id, p.code, p.description, p.physical_stock, ((COALESCE(sum((ri.quantity)::bigint), '0'::numeric))::bigint), (p.physical_stock - ((COALESCE(sum((ri.quantity)::bigint), '0'::numeric))::bigint))
+   Buffers: shared hit=685 read=12
+   CTE reference_time
+     ->  Result  (cost=0.00..0.01 rows=1 width=8) (actual time=0.001..0.001 rows=1 loops=1)
+           Output: clock_timestamp()
+   CTE page
+     ->  Limit  (cost=0.42..21.29 rows=21 width=58) (actual time=0.010..0.013 rows=21 loops=1)
+           Output: parts.id, parts.workshop_id, parts.code, parts.description, parts.physical_stock
+           Buffers: shared hit=4
+           ->  Index Scan using uq_parts_workshop_id on public.parts  (cost=0.42..3716.53 rows=3740 width=58) (actual time=0.009..0.011 rows=21 loops=1)
+                 Output: parts.id, parts.workshop_id, parts.code, parts.description, parts.physical_stock
+                 Index Cond: ((parts.workshop_id = '1'::bigint) AND (parts.id > '0'::bigint))
+                 Buffers: shared hit=4
+   ->  CTE Scan on page p  (cost=0.00..0.42 rows=21 width=84) (actual time=0.011..0.017 rows=21 loops=1)
+         Output: p.id, p.workshop_id, p.code, p.description, p.physical_stock
+         Buffers: shared hit=4
+   ->  Nested Loop  (cost=14.36..14.40 rows=1 width=8) (actual time=0.009..0.010 rows=1 loops=21)
+         Output: ((COALESCE(sum((ri.quantity)::bigint), '0'::numeric))::bigint)
+         Buffers: shared hit=681 read=12
+         ->  CTE Scan on reference_time t  (cost=0.00..0.02 rows=1 width=8) (actual time=0.000..0.000 rows=1 loops=21)
+               Output: t.now
+         ->  Aggregate  (cost=14.36..14.37 rows=1 width=8) (actual time=0.009..0.009 rows=1 loops=21)
+               Output: (COALESCE(sum((ri.quantity)::bigint), '0'::numeric))::bigint
+               Buffers: shared hit=681 read=12
+               ->  Nested Loop  (cost=0.55..14.35 rows=1 width=4) (actual time=0.009..0.009 rows=0 loops=21)
+                     Output: ri.quantity
+                     Inner Unique: true
+                     Join Filter: (ri.reservation_id = r.id)
+                     Buffers: shared hit=681 read=12
+                     ->  Index Only Scan using ix_reservation_items_workshop_part_reservation on public.reservation_items ri  (cost=0.43..8.45 rows=1 width=20) (actual time=0.003..0.006 rows=10 loops=21)
+                           Output: ri.workshop_id, ri.part_id, ri.reservation_id, ri.quantity
+                           Index Cond: ((ri.workshop_id = p.workshop_id) AND (ri.part_id = p.id))
+                           Heap Fetches: 210
+                           Buffers: shared hit=261 read=12
+                     ->  Index Only Scan using ix_reservations_active_workshop_id on public.reservations r  (cost=0.12..5.90 rows=1 width=16) (actual time=0.000..0.000 rows=0 loops=210)
+                           Output: r.workshop_id, r.id, r.expires_at
+                           Index Cond: (r.workshop_id = p.workshop_id)
+                           Filter: (r.expires_at > t.now)
+                           Heap Fetches: 0
+                           Buffers: shared hit=420
+ Planning:
+   Buffers: shared hit=400 read=18
+ Planning Time: 0.824 ms
+ Execution Time: 0.272 ms
+(45 rows)
+
+Busca textual complementar / filtro
+                                                                                                  QUERY PLAN                                                                                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop  (cost=118.54..407.36 rows=21 width=92) (actual time=0.031..0.256 rows=21 loops=1)
+   Output: p.id, p.code, p.description, p.physical_stock, ((COALESCE(sum((ri.quantity)::bigint), '0'::numeric))::bigint), (p.physical_stock - ((COALESCE(sum((ri.quantity)::bigint), '0'::numeric))::bigint))
+   Buffers: shared hit=689 read=9
+   CTE reference_time
+     ->  Result  (cost=0.00..0.01 rows=1 width=8) (actual time=0.000..0.001 rows=1 loops=1)
+           Output: clock_timestamp()
+   CTE page
+     ->  Limit  (cost=0.42..104.16 rows=21 width=58) (actual time=0.011..0.074 rows=21 loops=1)
+           Output: parts.id, parts.workshop_id, parts.code, parts.description, parts.physical_stock
+           Buffers: shared hit=5
+           ->  Index Scan using uq_parts_workshop_id on public.parts  (cost=0.42..3735.23 rows=756 width=58) (actual time=0.011..0.073 rows=21 loops=1)
+                 Output: parts.id, parts.workshop_id, parts.code, parts.description, parts.physical_stock
+                 Index Cond: ((parts.workshop_id = '1'::bigint) AND (parts.id > '0'::bigint))
+                 Filter: ((parts.code ~~* '%filtro%'::text) OR (parts.description ~~* '%filtro%'::text))
+                 Rows Removed by Filter: 80
+                 Buffers: shared hit=5
+   ->  CTE Scan on page p  (cost=0.00..0.42 rows=21 width=84) (actual time=0.012..0.076 rows=21 loops=1)
+         Output: p.id, p.workshop_id, p.code, p.description, p.physical_stock
+         Buffers: shared hit=5
+   ->  Nested Loop  (cost=14.36..14.40 rows=1 width=8) (actual time=0.008..0.008 rows=1 loops=21)
+         Output: ((COALESCE(sum((ri.quantity)::bigint), '0'::numeric))::bigint)
+         Buffers: shared hit=684 read=9
+         ->  CTE Scan on reference_time t  (cost=0.00..0.02 rows=1 width=8) (actual time=0.000..0.000 rows=1 loops=21)
+               Output: t.now
+         ->  Aggregate  (cost=14.36..14.37 rows=1 width=8) (actual time=0.008..0.008 rows=1 loops=21)
+               Output: (COALESCE(sum((ri.quantity)::bigint), '0'::numeric))::bigint
+               Buffers: shared hit=684 read=9
+               ->  Nested Loop  (cost=0.55..14.35 rows=1 width=4) (actual time=0.008..0.008 rows=0 loops=21)
+                     Output: ri.quantity
+                     Inner Unique: true
+                     Join Filter: (ri.reservation_id = r.id)
+                     Buffers: shared hit=684 read=9
+                     ->  Index Only Scan using ix_reservation_items_workshop_part_reservation on public.reservation_items ri  (cost=0.43..8.45 rows=1 width=20) (actual time=0.003..0.005 rows=10 loops=21)
+                           Output: ri.workshop_id, ri.part_id, ri.reservation_id, ri.quantity
+                           Index Cond: ((ri.workshop_id = p.workshop_id) AND (ri.part_id = p.id))
+                           Heap Fetches: 210
+                           Buffers: shared hit=264 read=9
+                     ->  Index Only Scan using ix_reservations_active_workshop_id on public.reservations r  (cost=0.12..5.90 rows=1 width=16) (actual time=0.000..0.000 rows=0 loops=210)
+                           Output: r.workshop_id, r.id, r.expires_at
+                           Index Cond: (r.workshop_id = p.workshop_id)
+                           Filter: (r.expires_at > t.now)
+                           Heap Fetches: 0
+                           Buffers: shared hit=420
+ Planning:
+   Buffers: shared hit=23 read=7
+ Planning Time: 1.632 ms
+ Execution Time: 0.277 ms
+(47 rows)
+
+DEALLOCATE

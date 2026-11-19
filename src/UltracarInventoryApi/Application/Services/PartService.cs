@@ -60,16 +60,22 @@ public sealed class PartService : IPartService
     {
         if (workshopId <= 0 || pageSize is < 1 or > 20)
         {
-            return Invalid(
-                "Workshop ID must be positive and page size must be between 1 and 20.");
+            return Result<CursorPage<PartResponseDto>>.Failure(
+                new Error(
+                    "INVALID_QUERY",
+                    "Workshop ID must be positive and page size must be between 1 and 20.",
+                    ErrorType.Validation));
         }
 
         var term = searchTerm?.Trim() ?? string.Empty;
 
         if (term.Length > 200)
         {
-            return Invalid(
-                "Search term must contain at most 200 characters.");
+            return Result<CursorPage<PartResponseDto>>.Failure(
+                new Error(
+                    "INVALID_QUERY",
+                    "Search term must contain at most 200 characters.",
+                    ErrorType.Validation));
         }
 
         long? afterId = null;
@@ -78,7 +84,11 @@ public sealed class PartService : IPartService
         {
             if (cursor.Length is 0 or > 4096)
             {
-                return Invalid("Invalid cursor.");
+                return Result<CursorPage<PartResponseDto>>.Failure(
+                    new Error(
+                        "INVALID_QUERY",
+                        "Invalid cursor.",
+                        ErrorType.Validation));
             }
 
             try
@@ -91,8 +101,11 @@ public sealed class PartService : IPartService
                     || payload.SearchTerm != term
                     || payload.AfterId <= 0)
                 {
-                    return Invalid(
-                        "The cursor does not match the workshop and search term.");
+                    return Result<CursorPage<PartResponseDto>>.Failure(
+                        new Error(
+                            "INVALID_QUERY",
+                            "The cursor does not match the workshop and search term.",
+                            ErrorType.Validation));
                 }
 
                 afterId = payload.AfterId;
@@ -102,7 +115,11 @@ public sealed class PartService : IPartService
                     or JsonException
                     or ArgumentException)
             {
-                return Invalid("Invalid cursor.");
+                return Result<CursorPage<PartResponseDto>>.Failure(
+                    new Error(
+                        "INVALID_QUERY",
+                        "Invalid cursor.",
+                        ErrorType.Validation));
             }
         }
 
@@ -128,15 +145,5 @@ public sealed class PartService : IPartService
             new CursorPage<PartResponseDto>(
                 items,
                 nextCursor));
-    }
-
-    private static Result<CursorPage<PartResponseDto>> Invalid(
-        string message)
-    {
-        return Result<CursorPage<PartResponseDto>>.Failure(
-            new Error(
-                "INVALID_QUERY",
-                message,
-                ErrorType.Validation));
     }
 }

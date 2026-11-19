@@ -1,0 +1,1321 @@
+{
+  "info": {
+    "_postman_id": "13905116-fb1e-4077-add1-8fb551752c76",
+    "name": "Ultracar - R4 - Expiracao natural em 30 minutos",
+    "description": "Teste com passagem real de aproximadamente 30 minutos. Execute toda a collection pelo Runner com uma iteracao. O loop consulta o saldo a cada ate 15 segundos, verifica que nao ha liberacao antecipada e so segue depois de expiraEm. Limite de espera 35 minutos. Usa a peca dedicada de expiracao natural e duas instancias. Nenhum TTL e reduzido. Veja README.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "smoke_runId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "id": "8c6ac94c-91d7-473f-b4da-0a2302a74be3",
+      "name": "01 - R4 natural - saldo livre antes de criar",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "try { (function initialize() {",
+              "    const numeric = ['oficinaId','oficinaExternaId','usuarioId','pecaOkId','pecaSemSaldoId','pecaSaldoBaixoId','pecaIdempotenciaId','pecaConfirmacaoId','pecaCancelamentoId','pecaExpiradaId','pecaConcorrenciaId','pecaExternaId','pecaExpiracaoNaturalId','reservaExpiradaId'];",
+              "    for (const key of numeric) {",
+              "        const input = Number(pm.variables.get(key));",
+              "        if (!Number.isSafeInteger(input) || input <= 0) throw new Error('Configure ' + key + ' no environment.');",
+              "        pm.variables.set(key, String(input));",
+              "    }",
+              "    for (const key of ['baseUrl','baseUrl2']) {",
+              "        const input = String(pm.variables.get(key) || '').replace(/\\/+$/, '');",
+              "        if (!/^https?:\\/\\/[^/]+/.test(input)) throw new Error('Configure ' + key + ' com uma URL HTTP valida.');",
+              "        pm.variables.set(key, input);",
+              "    }",
+              "    if (pm.variables.get('oficinaId') === pm.variables.get('oficinaExternaId')) throw new Error('As duas oficinas precisam ser diferentes.');",
+              "    const origin = url => url.match(/^https?:\\/\\/[^/]+/)[0].toLowerCase();",
+              "    if (origin(pm.variables.get('baseUrl')) === origin(pm.variables.get('baseUrl2'))) throw new Error('R2 exige URLs de duas instancias distintas.');",
+              "    pm.collectionVariables.set('smoke_runId', pm.variables.replaceIn('{{$guid}}'));",
+              "    for (const key of ['r1Problem','idempotent','confirmed','cancelled','ownerA','ownerB','expiredReuse','natural','clockOffset','naturalStarted','polls','r2Result']) pm.collectionVariables.unset('smoke_' + key);",
+              "})(); } catch (error) { pm.execution.setNextRequest(null); throw error; }"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(async function () {",
+              "const stopOnFailure = true;",
+              "",
+              "    let passed = true;",
+              "    const value = key => pm.variables.get(key);",
+              "    const number = key => Number(value(key));",
+              "    const state = key => JSON.parse(pm.collectionVariables.get('smoke_' + key));",
+              "    const save = (key, item) => pm.collectionVariables.set('smoke_' + key, JSON.stringify(item));",
+              "    const eq = (actual, expected, message) => pm.expect(actual, message).to.eql(expected);",
+              "    const ensure = (condition, message) => pm.expect(condition, message).to.equal(true);",
+              "    function test(name, check) {",
+              "        pm.test(name, () => {",
+              "            try { check(); }",
+              "            catch (error) { passed = false; if (stopOnFailure) pm.execution.setNextRequest(null); throw error; }",
+              "        });",
+              "    }",
+              "    function integer(item, minimum, label) {",
+              "        ensure(Number.isSafeInteger(item) && item >= minimum, label + ': inteiro >= ' + minimum);",
+              "    }",
+              "    function balance(item, partId, expected) {",
+              "        eq(item.pecaId, partId, 'peca consultada');",
+              "        integer(item.estoqueFisico, 0, 'estoqueFisico');",
+              "        integer(item.estoqueReservado, 0, 'estoqueReservado');",
+              "        integer(item.saldoDisponivel, 0, 'saldoDisponivel nunca negativo');",
+              "        eq(item.saldoDisponivel, item.estoqueFisico - item.estoqueReservado, 'saldo = fisico - reservado');",
+              "        if (expected) eq([item.estoqueFisico, item.estoqueReservado, item.saldoDisponivel], expected);",
+              "    }",
+              "    function page(item) {",
+              "        ensure(Array.isArray(item.items), 'items deve ser array');",
+              "        ensure(item.items.length <= 20, 'limite da pagina');",
+              "        ensure(item.nextCursor === null || (typeof item.nextCursor === 'string' && item.nextCursor.length > 0), 'nextCursor');",
+              "        let previous = 0;",
+              "        item.items.forEach(part => {",
+              "            integer(part.id, 1, 'id');",
+              "            ensure(part.id > previous, 'IDs ordenados e distintos');",
+              "            previous = part.id;",
+              "            eq(typeof part.codigo, 'string');",
+              "            eq(typeof part.descricao, 'string');",
+              "            balance(Object.assign({ pecaId: part.id }, part), part.id);",
+              "        });",
+              "    }",
+              "    function reservation(item, status, expectedBody) {",
+              "        integer(item.id, 1, 'id da reserva');",
+              "        eq(item.status, status);",
+              "        eq(item.ordemServicoId, expectedBody.ordemServicoId);",
+              "        eq(item.itens.slice().sort((a,b) => a.pecaId-b.pecaId), expectedBody.itens.slice().sort((a,b) => a.pecaId-b.pecaId));",
+              "        const created = Date.parse(item.criadaEm), expires = Date.parse(item.expiraEm);",
+              "        ensure(Number.isFinite(created) && Number.isFinite(expires), 'datas validas');",
+              "        eq(expires - created, 30 * 60 * 1000, 'TTL de 30 minutos');",
+              "    }",
+              "    function problem(response, item, status, code) {",
+              "        eq(response.code, status);",
+              "        eq((response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/problem+json');",
+              "        eq(item.status, status);",
+              "        eq(typeof item.title, 'string');",
+              "        ensure(item.title.length > 0, 'title preenchido');",
+              "        if (item.detail !== undefined) eq(typeof item.detail, 'string');",
+              "        eq(item.code, code);",
+              "        // RFC 7807 permite omitir type (equivale a about:blank) e instance.",
+              "        if (item.type !== undefined) ensure(typeof item.type === 'string' && item.type.length > 0, 'type e URI-reference');",
+              "        if (item.instance !== undefined) eq(typeof item.instance, 'string');",
+              "    }",
+              "    function send(request) {",
+              "        return new Promise((resolve, reject) => pm.sendRequest(request, (error, response) => error ? reject(error) : resolve(response)));",
+              "    }",
+              "    function headers(workshop) {",
+              "        return { 'X-Oficina-Id': String(workshop), 'X-User-Id': String(number('usuarioId')), 'Content-Type': 'application/json', Accept: 'application/json' };",
+              "    }",
+              "",
+              "",
+              "    test('HTTP 200', () => eq(pm.response.code, 200));",
+              "    if (!passed) return;",
+              "    let data;",
+              "    test('Contrato JSON e Content-Type', () => {",
+              "        data = pm.response.json();",
+              "        ensure(data !== null && typeof data === 'object' && !Array.isArray(data), 'objeto JSON');",
+              "        eq((pm.response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/json');",
+              "    });",
+              "    if (!passed) return;",
+              "    ",
+              "test('Saldo consistente e esperado', () => balance(data, number('pecaExpiracaoNaturalId'), [1,0,1]));",
+              "})().catch(error => {",
+              "    pm.test('Script e requisicoes auxiliares concluidos', () => { throw error; });",
+              "    pm.execution.setNextRequest(null);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Oficina-Id",
+            "value": "{{oficinaId}}",
+            "type": "text"
+          }
+        ],
+        "description": "R4 natural - saldo livre antes de criar",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/pecas/{{pecaExpiracaoNaturalId}}/saldo",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "pecas",
+            "{{pecaExpiracaoNaturalId}}",
+            "saldo"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "12ba6c9a-355f-4d39-8c02-3c5c01c207ac",
+      "name": "02 - R4 natural - criar reserva de 30 minutos",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(async function () {",
+              "const stopOnFailure = true;",
+              "",
+              "    let passed = true;",
+              "    const value = key => pm.variables.get(key);",
+              "    const number = key => Number(value(key));",
+              "    const state = key => JSON.parse(pm.collectionVariables.get('smoke_' + key));",
+              "    const save = (key, item) => pm.collectionVariables.set('smoke_' + key, JSON.stringify(item));",
+              "    const eq = (actual, expected, message) => pm.expect(actual, message).to.eql(expected);",
+              "    const ensure = (condition, message) => pm.expect(condition, message).to.equal(true);",
+              "    function test(name, check) {",
+              "        pm.test(name, () => {",
+              "            try { check(); }",
+              "            catch (error) { passed = false; if (stopOnFailure) pm.execution.setNextRequest(null); throw error; }",
+              "        });",
+              "    }",
+              "    function integer(item, minimum, label) {",
+              "        ensure(Number.isSafeInteger(item) && item >= minimum, label + ': inteiro >= ' + minimum);",
+              "    }",
+              "    function balance(item, partId, expected) {",
+              "        eq(item.pecaId, partId, 'peca consultada');",
+              "        integer(item.estoqueFisico, 0, 'estoqueFisico');",
+              "        integer(item.estoqueReservado, 0, 'estoqueReservado');",
+              "        integer(item.saldoDisponivel, 0, 'saldoDisponivel nunca negativo');",
+              "        eq(item.saldoDisponivel, item.estoqueFisico - item.estoqueReservado, 'saldo = fisico - reservado');",
+              "        if (expected) eq([item.estoqueFisico, item.estoqueReservado, item.saldoDisponivel], expected);",
+              "    }",
+              "    function page(item) {",
+              "        ensure(Array.isArray(item.items), 'items deve ser array');",
+              "        ensure(item.items.length <= 20, 'limite da pagina');",
+              "        ensure(item.nextCursor === null || (typeof item.nextCursor === 'string' && item.nextCursor.length > 0), 'nextCursor');",
+              "        let previous = 0;",
+              "        item.items.forEach(part => {",
+              "            integer(part.id, 1, 'id');",
+              "            ensure(part.id > previous, 'IDs ordenados e distintos');",
+              "            previous = part.id;",
+              "            eq(typeof part.codigo, 'string');",
+              "            eq(typeof part.descricao, 'string');",
+              "            balance(Object.assign({ pecaId: part.id }, part), part.id);",
+              "        });",
+              "    }",
+              "    function reservation(item, status, expectedBody) {",
+              "        integer(item.id, 1, 'id da reserva');",
+              "        eq(item.status, status);",
+              "        eq(item.ordemServicoId, expectedBody.ordemServicoId);",
+              "        eq(item.itens.slice().sort((a,b) => a.pecaId-b.pecaId), expectedBody.itens.slice().sort((a,b) => a.pecaId-b.pecaId));",
+              "        const created = Date.parse(item.criadaEm), expires = Date.parse(item.expiraEm);",
+              "        ensure(Number.isFinite(created) && Number.isFinite(expires), 'datas validas');",
+              "        eq(expires - created, 30 * 60 * 1000, 'TTL de 30 minutos');",
+              "    }",
+              "    function problem(response, item, status, code) {",
+              "        eq(response.code, status);",
+              "        eq((response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/problem+json');",
+              "        eq(item.status, status);",
+              "        eq(typeof item.title, 'string');",
+              "        ensure(item.title.length > 0, 'title preenchido');",
+              "        if (item.detail !== undefined) eq(typeof item.detail, 'string');",
+              "        eq(item.code, code);",
+              "        // RFC 7807 permite omitir type (equivale a about:blank) e instance.",
+              "        if (item.type !== undefined) ensure(typeof item.type === 'string' && item.type.length > 0, 'type e URI-reference');",
+              "        if (item.instance !== undefined) eq(typeof item.instance, 'string');",
+              "    }",
+              "    function send(request) {",
+              "        return new Promise((resolve, reject) => pm.sendRequest(request, (error, response) => error ? reject(error) : resolve(response)));",
+              "    }",
+              "    function headers(workshop) {",
+              "        return { 'X-Oficina-Id': String(workshop), 'X-User-Id': String(number('usuarioId')), 'Content-Type': 'application/json', Accept: 'application/json' };",
+              "    }",
+              "",
+              "",
+              "    test('HTTP 201', () => eq(pm.response.code, 201));",
+              "    if (!passed) return;",
+              "    let data;",
+              "    test('Contrato JSON e Content-Type', () => {",
+              "        data = pm.response.json();",
+              "        ensure(data !== null && typeof data === 'object' && !Array.isArray(data), 'objeto JSON');",
+              "        eq((pm.response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/json');",
+              "    });",
+              "    if (!passed) return;",
+              "    ",
+              "",
+              "    test('Reserva Active, itens completos e TTL correto', () => reservation(data, 'Active', JSON.parse(pm.variables.replaceIn(pm.request.body.raw))));",
+              "    if (passed) save('natural', data);",
+              "})().catch(error => {",
+              "    pm.test('Script e requisicoes auxiliares concluidos', () => { throw error; });",
+              "    pm.execution.setNextRequest(null);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Oficina-Id",
+            "value": "{{oficinaId}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{usuarioId}}",
+            "type": "text"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "smoke-{{smoke_runId}}-R4-NATURAL",
+            "type": "text"
+          }
+        ],
+        "description": "R4 natural - criar reserva de 30 minutos",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/reservas",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "reservas"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ordemServicoId\": \"SMOKE-R4-NATURAL-{{smoke_runId}}\",\n  \"itens\": [\n    { \"pecaId\": {{pecaExpiracaoNaturalId}}, \"quantidade\": 1 }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "2e006a07-c680-4168-b451-75295dc19de0",
+      "name": "03 - R4 natural - registrar prazo e confirmar bloqueio",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(async function () {",
+              "const stopOnFailure = true;",
+              "",
+              "    let passed = true;",
+              "    const value = key => pm.variables.get(key);",
+              "    const number = key => Number(value(key));",
+              "    const state = key => JSON.parse(pm.collectionVariables.get('smoke_' + key));",
+              "    const save = (key, item) => pm.collectionVariables.set('smoke_' + key, JSON.stringify(item));",
+              "    const eq = (actual, expected, message) => pm.expect(actual, message).to.eql(expected);",
+              "    const ensure = (condition, message) => pm.expect(condition, message).to.equal(true);",
+              "    function test(name, check) {",
+              "        pm.test(name, () => {",
+              "            try { check(); }",
+              "            catch (error) { passed = false; if (stopOnFailure) pm.execution.setNextRequest(null); throw error; }",
+              "        });",
+              "    }",
+              "    function integer(item, minimum, label) {",
+              "        ensure(Number.isSafeInteger(item) && item >= minimum, label + ': inteiro >= ' + minimum);",
+              "    }",
+              "    function balance(item, partId, expected) {",
+              "        eq(item.pecaId, partId, 'peca consultada');",
+              "        integer(item.estoqueFisico, 0, 'estoqueFisico');",
+              "        integer(item.estoqueReservado, 0, 'estoqueReservado');",
+              "        integer(item.saldoDisponivel, 0, 'saldoDisponivel nunca negativo');",
+              "        eq(item.saldoDisponivel, item.estoqueFisico - item.estoqueReservado, 'saldo = fisico - reservado');",
+              "        if (expected) eq([item.estoqueFisico, item.estoqueReservado, item.saldoDisponivel], expected);",
+              "    }",
+              "    function page(item) {",
+              "        ensure(Array.isArray(item.items), 'items deve ser array');",
+              "        ensure(item.items.length <= 20, 'limite da pagina');",
+              "        ensure(item.nextCursor === null || (typeof item.nextCursor === 'string' && item.nextCursor.length > 0), 'nextCursor');",
+              "        let previous = 0;",
+              "        item.items.forEach(part => {",
+              "            integer(part.id, 1, 'id');",
+              "            ensure(part.id > previous, 'IDs ordenados e distintos');",
+              "            previous = part.id;",
+              "            eq(typeof part.codigo, 'string');",
+              "            eq(typeof part.descricao, 'string');",
+              "            balance(Object.assign({ pecaId: part.id }, part), part.id);",
+              "        });",
+              "    }",
+              "    function reservation(item, status, expectedBody) {",
+              "        integer(item.id, 1, 'id da reserva');",
+              "        eq(item.status, status);",
+              "        eq(item.ordemServicoId, expectedBody.ordemServicoId);",
+              "        eq(item.itens.slice().sort((a,b) => a.pecaId-b.pecaId), expectedBody.itens.slice().sort((a,b) => a.pecaId-b.pecaId));",
+              "        const created = Date.parse(item.criadaEm), expires = Date.parse(item.expiraEm);",
+              "        ensure(Number.isFinite(created) && Number.isFinite(expires), 'datas validas');",
+              "        eq(expires - created, 30 * 60 * 1000, 'TTL de 30 minutos');",
+              "    }",
+              "    function problem(response, item, status, code) {",
+              "        eq(response.code, status);",
+              "        eq((response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/problem+json');",
+              "        eq(item.status, status);",
+              "        eq(typeof item.title, 'string');",
+              "        ensure(item.title.length > 0, 'title preenchido');",
+              "        if (item.detail !== undefined) eq(typeof item.detail, 'string');",
+              "        eq(item.code, code);",
+              "        // RFC 7807 permite omitir type (equivale a about:blank) e instance.",
+              "        if (item.type !== undefined) ensure(typeof item.type === 'string' && item.type.length > 0, 'type e URI-reference');",
+              "        if (item.instance !== undefined) eq(typeof item.instance, 'string');",
+              "    }",
+              "    function send(request) {",
+              "        return new Promise((resolve, reject) => pm.sendRequest(request, (error, response) => error ? reject(error) : resolve(response)));",
+              "    }",
+              "    function headers(workshop) {",
+              "        return { 'X-Oficina-Id': String(workshop), 'X-User-Id': String(number('usuarioId')), 'Content-Type': 'application/json', Accept: 'application/json' };",
+              "    }",
+              "",
+              "",
+              "    test('HTTP 200', () => eq(pm.response.code, 200));",
+              "    if (!passed) return;",
+              "    let data;",
+              "    test('Contrato JSON e Content-Type', () => {",
+              "        data = pm.response.json();",
+              "        ensure(data !== null && typeof data === 'object' && !Array.isArray(data), 'objeto JSON');",
+              "        eq((pm.response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/json');",
+              "    });",
+              "    if (!passed) return;",
+              "    ",
+              "",
+              "    test('Reserva bloqueia o saldo antes da expiracao',()=>balance(data,number('pecaExpiracaoNaturalId'),[1,1,0]));",
+              "    test('Relogio HTTP do servidor disponivel',()=>ensure(Number.isFinite(Date.parse(pm.response.headers.get('Date'))),'header Date valido'));",
+              "    if (passed) {",
+              "        save('clockOffset',Date.parse(pm.response.headers.get('Date'))-Date.now());",
+              "        save('naturalStarted',Date.now());save('polls',0);",
+              "    }",
+              "})().catch(error => {",
+              "    pm.test('Script e requisicoes auxiliares concluidos', () => { throw error; });",
+              "    pm.execution.setNextRequest(null);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Oficina-Id",
+            "value": "{{oficinaId}}",
+            "type": "text"
+          }
+        ],
+        "description": "R4 natural - registrar prazo e confirmar bloqueio",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/pecas/{{pecaExpiracaoNaturalId}}/saldo",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "pecas",
+            "{{pecaExpiracaoNaturalId}}",
+            "saldo"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "02fdf489-2c6f-42ca-877e-c80cd2cc7ffb",
+      "name": "04 - R4 natural - aguardar expiracao real e conferir liberacao",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const expiry=Date.parse(JSON.parse(pm.collectionVariables.get('smoke_natural')).expiraEm);",
+              "const offset=JSON.parse(pm.collectionVariables.get('smoke_clockOffset'));",
+              "const remaining=expiry+2000-(Date.now()+offset);",
+              "if (remaining>0) setTimeout(()=>{},Math.min(15000,remaining));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(async function () {",
+              "const stopOnFailure = true;",
+              "",
+              "    let passed = true;",
+              "    const value = key => pm.variables.get(key);",
+              "    const number = key => Number(value(key));",
+              "    const state = key => JSON.parse(pm.collectionVariables.get('smoke_' + key));",
+              "    const save = (key, item) => pm.collectionVariables.set('smoke_' + key, JSON.stringify(item));",
+              "    const eq = (actual, expected, message) => pm.expect(actual, message).to.eql(expected);",
+              "    const ensure = (condition, message) => pm.expect(condition, message).to.equal(true);",
+              "    function test(name, check) {",
+              "        pm.test(name, () => {",
+              "            try { check(); }",
+              "            catch (error) { passed = false; if (stopOnFailure) pm.execution.setNextRequest(null); throw error; }",
+              "        });",
+              "    }",
+              "    function integer(item, minimum, label) {",
+              "        ensure(Number.isSafeInteger(item) && item >= minimum, label + ': inteiro >= ' + minimum);",
+              "    }",
+              "    function balance(item, partId, expected) {",
+              "        eq(item.pecaId, partId, 'peca consultada');",
+              "        integer(item.estoqueFisico, 0, 'estoqueFisico');",
+              "        integer(item.estoqueReservado, 0, 'estoqueReservado');",
+              "        integer(item.saldoDisponivel, 0, 'saldoDisponivel nunca negativo');",
+              "        eq(item.saldoDisponivel, item.estoqueFisico - item.estoqueReservado, 'saldo = fisico - reservado');",
+              "        if (expected) eq([item.estoqueFisico, item.estoqueReservado, item.saldoDisponivel], expected);",
+              "    }",
+              "    function page(item) {",
+              "        ensure(Array.isArray(item.items), 'items deve ser array');",
+              "        ensure(item.items.length <= 20, 'limite da pagina');",
+              "        ensure(item.nextCursor === null || (typeof item.nextCursor === 'string' && item.nextCursor.length > 0), 'nextCursor');",
+              "        let previous = 0;",
+              "        item.items.forEach(part => {",
+              "            integer(part.id, 1, 'id');",
+              "            ensure(part.id > previous, 'IDs ordenados e distintos');",
+              "            previous = part.id;",
+              "            eq(typeof part.codigo, 'string');",
+              "            eq(typeof part.descricao, 'string');",
+              "            balance(Object.assign({ pecaId: part.id }, part), part.id);",
+              "        });",
+              "    }",
+              "    function reservation(item, status, expectedBody) {",
+              "        integer(item.id, 1, 'id da reserva');",
+              "        eq(item.status, status);",
+              "        eq(item.ordemServicoId, expectedBody.ordemServicoId);",
+              "        eq(item.itens.slice().sort((a,b) => a.pecaId-b.pecaId), expectedBody.itens.slice().sort((a,b) => a.pecaId-b.pecaId));",
+              "        const created = Date.parse(item.criadaEm), expires = Date.parse(item.expiraEm);",
+              "        ensure(Number.isFinite(created) && Number.isFinite(expires), 'datas validas');",
+              "        eq(expires - created, 30 * 60 * 1000, 'TTL de 30 minutos');",
+              "    }",
+              "    function problem(response, item, status, code) {",
+              "        eq(response.code, status);",
+              "        eq((response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/problem+json');",
+              "        eq(item.status, status);",
+              "        eq(typeof item.title, 'string');",
+              "        ensure(item.title.length > 0, 'title preenchido');",
+              "        if (item.detail !== undefined) eq(typeof item.detail, 'string');",
+              "        eq(item.code, code);",
+              "        // RFC 7807 permite omitir type (equivale a about:blank) e instance.",
+              "        if (item.type !== undefined) ensure(typeof item.type === 'string' && item.type.length > 0, 'type e URI-reference');",
+              "        if (item.instance !== undefined) eq(typeof item.instance, 'string');",
+              "    }",
+              "    function send(request) {",
+              "        return new Promise((resolve, reject) => pm.sendRequest(request, (error, response) => error ? reject(error) : resolve(response)));",
+              "    }",
+              "    function headers(workshop) {",
+              "        return { 'X-Oficina-Id': String(workshop), 'X-User-Id': String(number('usuarioId')), 'Content-Type': 'application/json', Accept: 'application/json' };",
+              "    }",
+              "",
+              "",
+              "    test('HTTP 200', () => eq(pm.response.code, 200));",
+              "    if (!passed) return;",
+              "    let data;",
+              "    test('Contrato JSON e Content-Type', () => {",
+              "        data = pm.response.json();",
+              "        ensure(data !== null && typeof data === 'object' && !Array.isArray(data), 'objeto JSON');",
+              "        eq((pm.response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/json');",
+              "    });",
+              "    if (!passed) return;",
+              "    ",
+              "",
+              "    test('Saldo sempre consistente durante a espera',()=>balance(data,number('pecaExpiracaoNaturalId')));",
+              "    const serverNow=Date.parse(pm.response.headers.get('Date'));",
+              "    const expires=Date.parse(state('natural').expiraEm);",
+              "    test('Espera limitada a 35 minutos e relogio valido',()=>{",
+              "        ensure(Number.isFinite(serverNow),'header Date valido');",
+              "        ensure(Date.now()-state('naturalStarted')<35*60*1000,'limite de espera');",
+              "    });",
+              "    if (!passed) return;",
+              "    if (serverNow<expires-1000) test('R4 - nao libera saldo antes do vencimento',()=>balance(data,number('pecaExpiracaoNaturalId'),[1,1,0]));",
+              "    if (!passed) return;",
+              "    if (serverNow<expires+2000) {",
+              "        save('polls',state('polls')+1);",
+              "        console.info('Aguardando ate '+state('natural').expiraEm+'; consulta '+state('polls'));",
+              "        pm.execution.setNextRequest(pm.info.requestId);",
+              "        return;",
+              "    }",
+              "    test('R4 - apos 30 minutos o saldo foi liberado naturalmente',()=>balance(data,number('pecaExpiracaoNaturalId'),[1,0,1]));",
+              "",
+              "})().catch(error => {",
+              "    pm.test('Script e requisicoes auxiliares concluidos', () => { throw error; });",
+              "    pm.execution.setNextRequest(null);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Oficina-Id",
+            "value": "{{oficinaId}}",
+            "type": "text"
+          }
+        ],
+        "description": "O Runner repete esta requisicao com pausas de ate 15 segundos. Aguarda expiraEm real; nao altera TTL nem datas do banco. Precisa executar via Run collection, nao apenas Send.",
+        "url": {
+          "raw": "{{baseUrl2}}/api/v1/pecas/{{pecaExpiracaoNaturalId}}/saldo",
+          "host": [
+            "{{baseUrl2}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "pecas",
+            "{{pecaExpiracaoNaturalId}}",
+            "saldo"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "5106e339-2b2e-4940-9bac-bd3e10ee63a5",
+      "name": "05 - R4 natural - confirmar reserva vencida retorna 409",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.variables.set('smoke_naturalId', String(JSON.parse(pm.collectionVariables.get('smoke_natural')).id));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(async function () {",
+              "const stopOnFailure = true;",
+              "",
+              "    let passed = true;",
+              "    const value = key => pm.variables.get(key);",
+              "    const number = key => Number(value(key));",
+              "    const state = key => JSON.parse(pm.collectionVariables.get('smoke_' + key));",
+              "    const save = (key, item) => pm.collectionVariables.set('smoke_' + key, JSON.stringify(item));",
+              "    const eq = (actual, expected, message) => pm.expect(actual, message).to.eql(expected);",
+              "    const ensure = (condition, message) => pm.expect(condition, message).to.equal(true);",
+              "    function test(name, check) {",
+              "        pm.test(name, () => {",
+              "            try { check(); }",
+              "            catch (error) { passed = false; if (stopOnFailure) pm.execution.setNextRequest(null); throw error; }",
+              "        });",
+              "    }",
+              "    function integer(item, minimum, label) {",
+              "        ensure(Number.isSafeInteger(item) && item >= minimum, label + ': inteiro >= ' + minimum);",
+              "    }",
+              "    function balance(item, partId, expected) {",
+              "        eq(item.pecaId, partId, 'peca consultada');",
+              "        integer(item.estoqueFisico, 0, 'estoqueFisico');",
+              "        integer(item.estoqueReservado, 0, 'estoqueReservado');",
+              "        integer(item.saldoDisponivel, 0, 'saldoDisponivel nunca negativo');",
+              "        eq(item.saldoDisponivel, item.estoqueFisico - item.estoqueReservado, 'saldo = fisico - reservado');",
+              "        if (expected) eq([item.estoqueFisico, item.estoqueReservado, item.saldoDisponivel], expected);",
+              "    }",
+              "    function page(item) {",
+              "        ensure(Array.isArray(item.items), 'items deve ser array');",
+              "        ensure(item.items.length <= 20, 'limite da pagina');",
+              "        ensure(item.nextCursor === null || (typeof item.nextCursor === 'string' && item.nextCursor.length > 0), 'nextCursor');",
+              "        let previous = 0;",
+              "        item.items.forEach(part => {",
+              "            integer(part.id, 1, 'id');",
+              "            ensure(part.id > previous, 'IDs ordenados e distintos');",
+              "            previous = part.id;",
+              "            eq(typeof part.codigo, 'string');",
+              "            eq(typeof part.descricao, 'string');",
+              "            balance(Object.assign({ pecaId: part.id }, part), part.id);",
+              "        });",
+              "    }",
+              "    function reservation(item, status, expectedBody) {",
+              "        integer(item.id, 1, 'id da reserva');",
+              "        eq(item.status, status);",
+              "        eq(item.ordemServicoId, expectedBody.ordemServicoId);",
+              "        eq(item.itens.slice().sort((a,b) => a.pecaId-b.pecaId), expectedBody.itens.slice().sort((a,b) => a.pecaId-b.pecaId));",
+              "        const created = Date.parse(item.criadaEm), expires = Date.parse(item.expiraEm);",
+              "        ensure(Number.isFinite(created) && Number.isFinite(expires), 'datas validas');",
+              "        eq(expires - created, 30 * 60 * 1000, 'TTL de 30 minutos');",
+              "    }",
+              "    function problem(response, item, status, code) {",
+              "        eq(response.code, status);",
+              "        eq((response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/problem+json');",
+              "        eq(item.status, status);",
+              "        eq(typeof item.title, 'string');",
+              "        ensure(item.title.length > 0, 'title preenchido');",
+              "        if (item.detail !== undefined) eq(typeof item.detail, 'string');",
+              "        eq(item.code, code);",
+              "        // RFC 7807 permite omitir type (equivale a about:blank) e instance.",
+              "        if (item.type !== undefined) ensure(typeof item.type === 'string' && item.type.length > 0, 'type e URI-reference');",
+              "        if (item.instance !== undefined) eq(typeof item.instance, 'string');",
+              "    }",
+              "    function send(request) {",
+              "        return new Promise((resolve, reject) => pm.sendRequest(request, (error, response) => error ? reject(error) : resolve(response)));",
+              "    }",
+              "    function headers(workshop) {",
+              "        return { 'X-Oficina-Id': String(workshop), 'X-User-Id': String(number('usuarioId')), 'Content-Type': 'application/json', Accept: 'application/json' };",
+              "    }",
+              "",
+              "",
+              "    test('HTTP 409', () => eq(pm.response.code, 409));",
+              "    if (!passed) return;",
+              "    let data;",
+              "    test('Contrato JSON e Content-Type', () => {",
+              "        data = pm.response.json();",
+              "        ensure(data !== null && typeof data === 'object' && !Array.isArray(data), 'objeto JSON');",
+              "        eq((pm.response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/problem+json');",
+              "    });",
+              "    if (!passed) return;",
+              "    test('R7 - ProblemDetails RESERVATION_EXPIRED', () => problem(pm.response, data, 409, 'RESERVATION_EXPIRED'));",
+              "    if (!passed) return;",
+              "",
+              "})().catch(error => {",
+              "    pm.test('Script e requisicoes auxiliares concluidos', () => { throw error; });",
+              "    pm.execution.setNextRequest(null);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Oficina-Id",
+            "value": "{{oficinaId}}",
+            "type": "text"
+          }
+        ],
+        "description": "R4 natural - confirmar reserva vencida retorna 409",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/reservas/{{smoke_naturalId}}/confirmacao",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "reservas",
+            "{{smoke_naturalId}}",
+            "confirmacao"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "75edcbef-6df3-4406-9778-a5a6bee3b6ce",
+      "name": "06 - R5 natural - cancelar reserva expirada retorna 409",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.variables.set('smoke_naturalId', String(JSON.parse(pm.collectionVariables.get('smoke_natural')).id));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(async function () {",
+              "const stopOnFailure = true;",
+              "",
+              "    let passed = true;",
+              "    const value = key => pm.variables.get(key);",
+              "    const number = key => Number(value(key));",
+              "    const state = key => JSON.parse(pm.collectionVariables.get('smoke_' + key));",
+              "    const save = (key, item) => pm.collectionVariables.set('smoke_' + key, JSON.stringify(item));",
+              "    const eq = (actual, expected, message) => pm.expect(actual, message).to.eql(expected);",
+              "    const ensure = (condition, message) => pm.expect(condition, message).to.equal(true);",
+              "    function test(name, check) {",
+              "        pm.test(name, () => {",
+              "            try { check(); }",
+              "            catch (error) { passed = false; if (stopOnFailure) pm.execution.setNextRequest(null); throw error; }",
+              "        });",
+              "    }",
+              "    function integer(item, minimum, label) {",
+              "        ensure(Number.isSafeInteger(item) && item >= minimum, label + ': inteiro >= ' + minimum);",
+              "    }",
+              "    function balance(item, partId, expected) {",
+              "        eq(item.pecaId, partId, 'peca consultada');",
+              "        integer(item.estoqueFisico, 0, 'estoqueFisico');",
+              "        integer(item.estoqueReservado, 0, 'estoqueReservado');",
+              "        integer(item.saldoDisponivel, 0, 'saldoDisponivel nunca negativo');",
+              "        eq(item.saldoDisponivel, item.estoqueFisico - item.estoqueReservado, 'saldo = fisico - reservado');",
+              "        if (expected) eq([item.estoqueFisico, item.estoqueReservado, item.saldoDisponivel], expected);",
+              "    }",
+              "    function page(item) {",
+              "        ensure(Array.isArray(item.items), 'items deve ser array');",
+              "        ensure(item.items.length <= 20, 'limite da pagina');",
+              "        ensure(item.nextCursor === null || (typeof item.nextCursor === 'string' && item.nextCursor.length > 0), 'nextCursor');",
+              "        let previous = 0;",
+              "        item.items.forEach(part => {",
+              "            integer(part.id, 1, 'id');",
+              "            ensure(part.id > previous, 'IDs ordenados e distintos');",
+              "            previous = part.id;",
+              "            eq(typeof part.codigo, 'string');",
+              "            eq(typeof part.descricao, 'string');",
+              "            balance(Object.assign({ pecaId: part.id }, part), part.id);",
+              "        });",
+              "    }",
+              "    function reservation(item, status, expectedBody) {",
+              "        integer(item.id, 1, 'id da reserva');",
+              "        eq(item.status, status);",
+              "        eq(item.ordemServicoId, expectedBody.ordemServicoId);",
+              "        eq(item.itens.slice().sort((a,b) => a.pecaId-b.pecaId), expectedBody.itens.slice().sort((a,b) => a.pecaId-b.pecaId));",
+              "        const created = Date.parse(item.criadaEm), expires = Date.parse(item.expiraEm);",
+              "        ensure(Number.isFinite(created) && Number.isFinite(expires), 'datas validas');",
+              "        eq(expires - created, 30 * 60 * 1000, 'TTL de 30 minutos');",
+              "    }",
+              "    function problem(response, item, status, code) {",
+              "        eq(response.code, status);",
+              "        eq((response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/problem+json');",
+              "        eq(item.status, status);",
+              "        eq(typeof item.title, 'string');",
+              "        ensure(item.title.length > 0, 'title preenchido');",
+              "        if (item.detail !== undefined) eq(typeof item.detail, 'string');",
+              "        eq(item.code, code);",
+              "        // RFC 7807 permite omitir type (equivale a about:blank) e instance.",
+              "        if (item.type !== undefined) ensure(typeof item.type === 'string' && item.type.length > 0, 'type e URI-reference');",
+              "        if (item.instance !== undefined) eq(typeof item.instance, 'string');",
+              "    }",
+              "    function send(request) {",
+              "        return new Promise((resolve, reject) => pm.sendRequest(request, (error, response) => error ? reject(error) : resolve(response)));",
+              "    }",
+              "    function headers(workshop) {",
+              "        return { 'X-Oficina-Id': String(workshop), 'X-User-Id': String(number('usuarioId')), 'Content-Type': 'application/json', Accept: 'application/json' };",
+              "    }",
+              "",
+              "",
+              "    test('HTTP 409', () => eq(pm.response.code, 409));",
+              "    if (!passed) return;",
+              "    let data;",
+              "    test('Contrato JSON e Content-Type', () => {",
+              "        data = pm.response.json();",
+              "        ensure(data !== null && typeof data === 'object' && !Array.isArray(data), 'objeto JSON');",
+              "        eq((pm.response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/problem+json');",
+              "    });",
+              "    if (!passed) return;",
+              "    test('R7 - ProblemDetails RESERVATION_EXPIRED', () => problem(pm.response, data, 409, 'RESERVATION_EXPIRED'));",
+              "    if (!passed) return;",
+              "",
+              "})().catch(error => {",
+              "    pm.test('Script e requisicoes auxiliares concluidos', () => { throw error; });",
+              "    pm.execution.setNextRequest(null);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Oficina-Id",
+            "value": "{{oficinaId}}",
+            "type": "text"
+          }
+        ],
+        "description": "R5 natural - cancelar reserva expirada retorna 409",
+        "url": {
+          "raw": "{{baseUrl2}}/api/v1/reservas/{{smoke_naturalId}}/cancelamento",
+          "host": [
+            "{{baseUrl2}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "reservas",
+            "{{smoke_naturalId}}",
+            "cancelamento"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "ebcc73ae-2549-4eee-be50-e3d331f57e14",
+      "name": "07 - R4 natural - reutilizar saldo liberado",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(async function () {",
+              "const stopOnFailure = true;",
+              "",
+              "    let passed = true;",
+              "    const value = key => pm.variables.get(key);",
+              "    const number = key => Number(value(key));",
+              "    const state = key => JSON.parse(pm.collectionVariables.get('smoke_' + key));",
+              "    const save = (key, item) => pm.collectionVariables.set('smoke_' + key, JSON.stringify(item));",
+              "    const eq = (actual, expected, message) => pm.expect(actual, message).to.eql(expected);",
+              "    const ensure = (condition, message) => pm.expect(condition, message).to.equal(true);",
+              "    function test(name, check) {",
+              "        pm.test(name, () => {",
+              "            try { check(); }",
+              "            catch (error) { passed = false; if (stopOnFailure) pm.execution.setNextRequest(null); throw error; }",
+              "        });",
+              "    }",
+              "    function integer(item, minimum, label) {",
+              "        ensure(Number.isSafeInteger(item) && item >= minimum, label + ': inteiro >= ' + minimum);",
+              "    }",
+              "    function balance(item, partId, expected) {",
+              "        eq(item.pecaId, partId, 'peca consultada');",
+              "        integer(item.estoqueFisico, 0, 'estoqueFisico');",
+              "        integer(item.estoqueReservado, 0, 'estoqueReservado');",
+              "        integer(item.saldoDisponivel, 0, 'saldoDisponivel nunca negativo');",
+              "        eq(item.saldoDisponivel, item.estoqueFisico - item.estoqueReservado, 'saldo = fisico - reservado');",
+              "        if (expected) eq([item.estoqueFisico, item.estoqueReservado, item.saldoDisponivel], expected);",
+              "    }",
+              "    function page(item) {",
+              "        ensure(Array.isArray(item.items), 'items deve ser array');",
+              "        ensure(item.items.length <= 20, 'limite da pagina');",
+              "        ensure(item.nextCursor === null || (typeof item.nextCursor === 'string' && item.nextCursor.length > 0), 'nextCursor');",
+              "        let previous = 0;",
+              "        item.items.forEach(part => {",
+              "            integer(part.id, 1, 'id');",
+              "            ensure(part.id > previous, 'IDs ordenados e distintos');",
+              "            previous = part.id;",
+              "            eq(typeof part.codigo, 'string');",
+              "            eq(typeof part.descricao, 'string');",
+              "            balance(Object.assign({ pecaId: part.id }, part), part.id);",
+              "        });",
+              "    }",
+              "    function reservation(item, status, expectedBody) {",
+              "        integer(item.id, 1, 'id da reserva');",
+              "        eq(item.status, status);",
+              "        eq(item.ordemServicoId, expectedBody.ordemServicoId);",
+              "        eq(item.itens.slice().sort((a,b) => a.pecaId-b.pecaId), expectedBody.itens.slice().sort((a,b) => a.pecaId-b.pecaId));",
+              "        const created = Date.parse(item.criadaEm), expires = Date.parse(item.expiraEm);",
+              "        ensure(Number.isFinite(created) && Number.isFinite(expires), 'datas validas');",
+              "        eq(expires - created, 30 * 60 * 1000, 'TTL de 30 minutos');",
+              "    }",
+              "    function problem(response, item, status, code) {",
+              "        eq(response.code, status);",
+              "        eq((response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/problem+json');",
+              "        eq(item.status, status);",
+              "        eq(typeof item.title, 'string');",
+              "        ensure(item.title.length > 0, 'title preenchido');",
+              "        if (item.detail !== undefined) eq(typeof item.detail, 'string');",
+              "        eq(item.code, code);",
+              "        // RFC 7807 permite omitir type (equivale a about:blank) e instance.",
+              "        if (item.type !== undefined) ensure(typeof item.type === 'string' && item.type.length > 0, 'type e URI-reference');",
+              "        if (item.instance !== undefined) eq(typeof item.instance, 'string');",
+              "    }",
+              "    function send(request) {",
+              "        return new Promise((resolve, reject) => pm.sendRequest(request, (error, response) => error ? reject(error) : resolve(response)));",
+              "    }",
+              "    function headers(workshop) {",
+              "        return { 'X-Oficina-Id': String(workshop), 'X-User-Id': String(number('usuarioId')), 'Content-Type': 'application/json', Accept: 'application/json' };",
+              "    }",
+              "",
+              "",
+              "    test('HTTP 201', () => eq(pm.response.code, 201));",
+              "    if (!passed) return;",
+              "    let data;",
+              "    test('Contrato JSON e Content-Type', () => {",
+              "        data = pm.response.json();",
+              "        ensure(data !== null && typeof data === 'object' && !Array.isArray(data), 'objeto JSON');",
+              "        eq((pm.response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/json');",
+              "    });",
+              "    if (!passed) return;",
+              "    ",
+              "",
+              "    test('Reserva Active, itens completos e TTL correto', () => reservation(data, 'Active', JSON.parse(pm.variables.replaceIn(pm.request.body.raw))));",
+              "    if (passed) save('expiredReuse', data);",
+              "})().catch(error => {",
+              "    pm.test('Script e requisicoes auxiliares concluidos', () => { throw error; });",
+              "    pm.execution.setNextRequest(null);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Oficina-Id",
+            "value": "{{oficinaId}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-User-Id",
+            "value": "{{usuarioId}}",
+            "type": "text"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "smoke-{{smoke_runId}}-R4-NATURAL-REUSE",
+            "type": "text"
+          }
+        ],
+        "description": "R4 natural - reutilizar saldo liberado",
+        "url": {
+          "raw": "{{baseUrl2}}/api/v1/reservas",
+          "host": [
+            "{{baseUrl2}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "reservas"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ordemServicoId\": \"SMOKE-R4-NATURAL-REUSE-{{smoke_runId}}\",\n  \"itens\": [\n    { \"pecaId\": {{pecaExpiracaoNaturalId}}, \"quantidade\": 1 }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "c856a27e-4133-4e0b-bf0f-20dd31754501",
+      "name": "08 - R4 natural - cancelar reserva de verificacao",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.variables.set('smoke_expiredReuseId', String(JSON.parse(pm.collectionVariables.get('smoke_expiredReuse')).id));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(async function () {",
+              "const stopOnFailure = true;",
+              "",
+              "    let passed = true;",
+              "    const value = key => pm.variables.get(key);",
+              "    const number = key => Number(value(key));",
+              "    const state = key => JSON.parse(pm.collectionVariables.get('smoke_' + key));",
+              "    const save = (key, item) => pm.collectionVariables.set('smoke_' + key, JSON.stringify(item));",
+              "    const eq = (actual, expected, message) => pm.expect(actual, message).to.eql(expected);",
+              "    const ensure = (condition, message) => pm.expect(condition, message).to.equal(true);",
+              "    function test(name, check) {",
+              "        pm.test(name, () => {",
+              "            try { check(); }",
+              "            catch (error) { passed = false; if (stopOnFailure) pm.execution.setNextRequest(null); throw error; }",
+              "        });",
+              "    }",
+              "    function integer(item, minimum, label) {",
+              "        ensure(Number.isSafeInteger(item) && item >= minimum, label + ': inteiro >= ' + minimum);",
+              "    }",
+              "    function balance(item, partId, expected) {",
+              "        eq(item.pecaId, partId, 'peca consultada');",
+              "        integer(item.estoqueFisico, 0, 'estoqueFisico');",
+              "        integer(item.estoqueReservado, 0, 'estoqueReservado');",
+              "        integer(item.saldoDisponivel, 0, 'saldoDisponivel nunca negativo');",
+              "        eq(item.saldoDisponivel, item.estoqueFisico - item.estoqueReservado, 'saldo = fisico - reservado');",
+              "        if (expected) eq([item.estoqueFisico, item.estoqueReservado, item.saldoDisponivel], expected);",
+              "    }",
+              "    function page(item) {",
+              "        ensure(Array.isArray(item.items), 'items deve ser array');",
+              "        ensure(item.items.length <= 20, 'limite da pagina');",
+              "        ensure(item.nextCursor === null || (typeof item.nextCursor === 'string' && item.nextCursor.length > 0), 'nextCursor');",
+              "        let previous = 0;",
+              "        item.items.forEach(part => {",
+              "            integer(part.id, 1, 'id');",
+              "            ensure(part.id > previous, 'IDs ordenados e distintos');",
+              "            previous = part.id;",
+              "            eq(typeof part.codigo, 'string');",
+              "            eq(typeof part.descricao, 'string');",
+              "            balance(Object.assign({ pecaId: part.id }, part), part.id);",
+              "        });",
+              "    }",
+              "    function reservation(item, status, expectedBody) {",
+              "        integer(item.id, 1, 'id da reserva');",
+              "        eq(item.status, status);",
+              "        eq(item.ordemServicoId, expectedBody.ordemServicoId);",
+              "        eq(item.itens.slice().sort((a,b) => a.pecaId-b.pecaId), expectedBody.itens.slice().sort((a,b) => a.pecaId-b.pecaId));",
+              "        const created = Date.parse(item.criadaEm), expires = Date.parse(item.expiraEm);",
+              "        ensure(Number.isFinite(created) && Number.isFinite(expires), 'datas validas');",
+              "        eq(expires - created, 30 * 60 * 1000, 'TTL de 30 minutos');",
+              "    }",
+              "    function problem(response, item, status, code) {",
+              "        eq(response.code, status);",
+              "        eq((response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/problem+json');",
+              "        eq(item.status, status);",
+              "        eq(typeof item.title, 'string');",
+              "        ensure(item.title.length > 0, 'title preenchido');",
+              "        if (item.detail !== undefined) eq(typeof item.detail, 'string');",
+              "        eq(item.code, code);",
+              "        // RFC 7807 permite omitir type (equivale a about:blank) e instance.",
+              "        if (item.type !== undefined) ensure(typeof item.type === 'string' && item.type.length > 0, 'type e URI-reference');",
+              "        if (item.instance !== undefined) eq(typeof item.instance, 'string');",
+              "    }",
+              "    function send(request) {",
+              "        return new Promise((resolve, reject) => pm.sendRequest(request, (error, response) => error ? reject(error) : resolve(response)));",
+              "    }",
+              "    function headers(workshop) {",
+              "        return { 'X-Oficina-Id': String(workshop), 'X-User-Id': String(number('usuarioId')), 'Content-Type': 'application/json', Accept: 'application/json' };",
+              "    }",
+              "",
+              "",
+              "    test('HTTP 200', () => eq(pm.response.code, 200));",
+              "    if (!passed) return;",
+              "    let data;",
+              "    test('Contrato JSON e Content-Type', () => {",
+              "        data = pm.response.json();",
+              "        ensure(data !== null && typeof data === 'object' && !Array.isArray(data), 'objeto JSON');",
+              "        eq((pm.response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/json');",
+              "    });",
+              "    if (!passed) return;",
+              "    ",
+              "",
+              "    test('Transicao Cancelled preserva ID, itens e datas', () => eq(data, Object.assign({}, state('expiredReuse'), {status:'Cancelled'})));",
+              "})().catch(error => {",
+              "    pm.test('Script e requisicoes auxiliares concluidos', () => { throw error; });",
+              "    pm.execution.setNextRequest(null);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Oficina-Id",
+            "value": "{{oficinaId}}",
+            "type": "text"
+          }
+        ],
+        "description": "R4 natural - cancelar reserva de verificacao",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/reservas/{{smoke_expiredReuseId}}/cancelamento",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "reservas",
+            "{{smoke_expiredReuseId}}",
+            "cancelamento"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "e98e5adc-450f-45bc-bf41-45402096ebc1",
+      "name": "09 - R4 natural - saldo final restaurado",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "(async function () {",
+              "const stopOnFailure = true;",
+              "",
+              "    let passed = true;",
+              "    const value = key => pm.variables.get(key);",
+              "    const number = key => Number(value(key));",
+              "    const state = key => JSON.parse(pm.collectionVariables.get('smoke_' + key));",
+              "    const save = (key, item) => pm.collectionVariables.set('smoke_' + key, JSON.stringify(item));",
+              "    const eq = (actual, expected, message) => pm.expect(actual, message).to.eql(expected);",
+              "    const ensure = (condition, message) => pm.expect(condition, message).to.equal(true);",
+              "    function test(name, check) {",
+              "        pm.test(name, () => {",
+              "            try { check(); }",
+              "            catch (error) { passed = false; if (stopOnFailure) pm.execution.setNextRequest(null); throw error; }",
+              "        });",
+              "    }",
+              "    function integer(item, minimum, label) {",
+              "        ensure(Number.isSafeInteger(item) && item >= minimum, label + ': inteiro >= ' + minimum);",
+              "    }",
+              "    function balance(item, partId, expected) {",
+              "        eq(item.pecaId, partId, 'peca consultada');",
+              "        integer(item.estoqueFisico, 0, 'estoqueFisico');",
+              "        integer(item.estoqueReservado, 0, 'estoqueReservado');",
+              "        integer(item.saldoDisponivel, 0, 'saldoDisponivel nunca negativo');",
+              "        eq(item.saldoDisponivel, item.estoqueFisico - item.estoqueReservado, 'saldo = fisico - reservado');",
+              "        if (expected) eq([item.estoqueFisico, item.estoqueReservado, item.saldoDisponivel], expected);",
+              "    }",
+              "    function page(item) {",
+              "        ensure(Array.isArray(item.items), 'items deve ser array');",
+              "        ensure(item.items.length <= 20, 'limite da pagina');",
+              "        ensure(item.nextCursor === null || (typeof item.nextCursor === 'string' && item.nextCursor.length > 0), 'nextCursor');",
+              "        let previous = 0;",
+              "        item.items.forEach(part => {",
+              "            integer(part.id, 1, 'id');",
+              "            ensure(part.id > previous, 'IDs ordenados e distintos');",
+              "            previous = part.id;",
+              "            eq(typeof part.codigo, 'string');",
+              "            eq(typeof part.descricao, 'string');",
+              "            balance(Object.assign({ pecaId: part.id }, part), part.id);",
+              "        });",
+              "    }",
+              "    function reservation(item, status, expectedBody) {",
+              "        integer(item.id, 1, 'id da reserva');",
+              "        eq(item.status, status);",
+              "        eq(item.ordemServicoId, expectedBody.ordemServicoId);",
+              "        eq(item.itens.slice().sort((a,b) => a.pecaId-b.pecaId), expectedBody.itens.slice().sort((a,b) => a.pecaId-b.pecaId));",
+              "        const created = Date.parse(item.criadaEm), expires = Date.parse(item.expiraEm);",
+              "        ensure(Number.isFinite(created) && Number.isFinite(expires), 'datas validas');",
+              "        eq(expires - created, 30 * 60 * 1000, 'TTL de 30 minutos');",
+              "    }",
+              "    function problem(response, item, status, code) {",
+              "        eq(response.code, status);",
+              "        eq((response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/problem+json');",
+              "        eq(item.status, status);",
+              "        eq(typeof item.title, 'string');",
+              "        ensure(item.title.length > 0, 'title preenchido');",
+              "        if (item.detail !== undefined) eq(typeof item.detail, 'string');",
+              "        eq(item.code, code);",
+              "        // RFC 7807 permite omitir type (equivale a about:blank) e instance.",
+              "        if (item.type !== undefined) ensure(typeof item.type === 'string' && item.type.length > 0, 'type e URI-reference');",
+              "        if (item.instance !== undefined) eq(typeof item.instance, 'string');",
+              "    }",
+              "    function send(request) {",
+              "        return new Promise((resolve, reject) => pm.sendRequest(request, (error, response) => error ? reject(error) : resolve(response)));",
+              "    }",
+              "    function headers(workshop) {",
+              "        return { 'X-Oficina-Id': String(workshop), 'X-User-Id': String(number('usuarioId')), 'Content-Type': 'application/json', Accept: 'application/json' };",
+              "    }",
+              "",
+              "",
+              "    test('HTTP 200', () => eq(pm.response.code, 200));",
+              "    if (!passed) return;",
+              "    let data;",
+              "    test('Contrato JSON e Content-Type', () => {",
+              "        data = pm.response.json();",
+              "        ensure(data !== null && typeof data === 'object' && !Array.isArray(data), 'objeto JSON');",
+              "        eq((pm.response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase(), 'application/json');",
+              "    });",
+              "    if (!passed) return;",
+              "    ",
+              "test('Saldo consistente e esperado', () => balance(data, number('pecaExpiracaoNaturalId'), [1,0,1]));",
+              "})().catch(error => {",
+              "    pm.test('Script e requisicoes auxiliares concluidos', () => { throw error; });",
+              "    pm.execution.setNextRequest(null);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Oficina-Id",
+            "value": "{{oficinaId}}",
+            "type": "text"
+          }
+        ],
+        "description": "R4 natural - saldo final restaurado",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/pecas/{{pecaExpiracaoNaturalId}}/saldo",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "pecas",
+            "{{pecaExpiracaoNaturalId}}",
+            "saldo"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

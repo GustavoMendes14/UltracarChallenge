@@ -46,19 +46,21 @@ public sealed class ReservationService : IReservationService
     {
         if (workshopId <= 0 || userId <= 0)
         {
-            return Failure(
-                "INVALID_CONTEXT",
-                "Workshop ID and user ID must be positive.",
-                ErrorType.Validation);
+            return Result<ReservationResponseDto>.Failure(
+                new Error(
+                    "INVALID_CONTEXT",
+                    "Workshop ID and user ID must be positive.",
+                    ErrorType.Validation));
         }
 
         if (string.IsNullOrWhiteSpace(idempotencyKey)
             || idempotencyKey.Length > 200)
         {
-            return Failure(
-                "INVALID_IDEMPOTENCY_KEY",
-                "Idempotency-Key is required and must contain at most 200 characters.",
-                ErrorType.Validation);
+            return Result<ReservationResponseDto>.Failure(
+                new Error(
+                    "INVALID_IDEMPOTENCY_KEY",
+                    "Idempotency-Key is required and must contain at most 200 characters.",
+                    ErrorType.Validation));
         }
 
         if (request is null
@@ -71,10 +73,11 @@ public sealed class ReservationService : IReservationService
                 || item.PartId <= 0
                 || item.Quantity <= 0))
         {
-            return Failure(
-                "INVALID_RESERVATION",
-                "Provide a service order and items with positive part IDs and quantities.",
-                ErrorType.Validation);
+            return Result<ReservationResponseDto>.Failure(
+                new Error(
+                    "INVALID_RESERVATION",
+                    "Provide a service order and items with positive part IDs and quantities.",
+                    ErrorType.Validation));
         }
 
         if (request.Items
@@ -82,10 +85,11 @@ public sealed class ReservationService : IReservationService
             .Distinct()
             .Count() != request.Items.Count)
         {
-            return Failure(
-                "DUPLICATE_PART",
-                "A part can appear only once in a reservation.",
-                ErrorType.Validation);
+            return Result<ReservationResponseDto>.Failure(
+                new Error(
+                    "DUPLICATE_PART",
+                    "A part can appear only once in a reservation.",
+                    ErrorType.Validation));
         }
 
         var requestHash = Convert.ToHexString(
@@ -119,10 +123,11 @@ public sealed class ReservationService : IReservationService
                     await _unitOfWork.RollbackAsync(
                         CancellationToken.None);
 
-                    return Failure(
-                        "IDEMPOTENCY_KEY_REUSED",
-                        "The idempotency key was already used with a different request body.",
-                        ErrorType.UnprocessableEntity);
+                    return Result<ReservationResponseDto>.Failure(
+                        new Error(
+                            "IDEMPOTENCY_KEY_REUSED",
+                            "The idempotency key was already used with a different request body.",
+                            ErrorType.UnprocessableEntity));
                 }
 
                 var outcome = JsonSerializer.Deserialize<StoredOutcome>(
@@ -159,10 +164,11 @@ public sealed class ReservationService : IReservationService
 
             if (lockedParts.Count != partIds.Length)
             {
-                result = Failure(
-                    "PART_NOT_FOUND",
-                    "One or more parts were not found in this workshop.",
-                    ErrorType.NotFound);
+                result = Result<ReservationResponseDto>.Failure(
+                    new Error(
+                        "PART_NOT_FOUND",
+                        "One or more parts were not found in this workshop.",
+                        ErrorType.NotFound));
             }
             else
             {
@@ -280,10 +286,11 @@ public sealed class ReservationService : IReservationService
     {
         if (workshopId <= 0 || reservationId <= 0)
         {
-            return Failure(
-                "INVALID_IDENTIFIER",
-                "Workshop ID and reservation ID must be positive.",
-                ErrorType.Validation);
+            return Result<ReservationResponseDto>.Failure(
+                new Error(
+                    "INVALID_IDENTIFIER",
+                    "Workshop ID and reservation ID must be positive.",
+                    ErrorType.Validation));
         }
 
         await _unitOfWork.BeginTransactionAsync(cancellationToken);
@@ -300,22 +307,24 @@ public sealed class ReservationService : IReservationService
             {
                 await _unitOfWork.RollbackAsync(CancellationToken.None);
 
-                return Failure(
-                    "RESERVATION_NOT_FOUND",
-                    "Reservation not found in this workshop.",
-                    ErrorType.NotFound);
+                return Result<ReservationResponseDto>.Failure(
+                    new Error(
+                        "RESERVATION_NOT_FOUND",
+                        "Reservation not found in this workshop.",
+                        ErrorType.NotFound));
             }
 
             if (reservation.Status != ReservationStatus.Active)
             {
                 await _unitOfWork.RollbackAsync(CancellationToken.None);
 
-                return Failure(
-                    reservation.Status == ReservationStatus.Expired
-                        ? "RESERVATION_EXPIRED"
-                        : "INVALID_RESERVATION_TRANSITION",
-                    "Only an active, unexpired reservation can be changed.",
-                    ErrorType.Conflict);
+                return Result<ReservationResponseDto>.Failure(
+                    new Error(
+                        reservation.Status == ReservationStatus.Expired
+                            ? "RESERVATION_EXPIRED"
+                            : "INVALID_RESERVATION_TRANSITION",
+                        "Only an active, unexpired reservation can be changed.",
+                        ErrorType.Conflict));
             }
 
             IReadOnlyList<PartEntity> lockedParts =
@@ -336,10 +345,11 @@ public sealed class ReservationService : IReservationService
                     await _unitOfWork.RollbackAsync(
                         CancellationToken.None);
 
-                    return Failure(
-                        "PART_NOT_FOUND",
-                        "A reservation part was not found in this workshop.",
-                        ErrorType.NotFound);
+                    return Result<ReservationResponseDto>.Failure(
+                        new Error(
+                            "PART_NOT_FOUND",
+                            "A reservation part was not found in this workshop.",
+                            ErrorType.NotFound));
                 }
             }
 
@@ -354,10 +364,11 @@ public sealed class ReservationService : IReservationService
 
                 await _unitOfWork.CommitAsync(cancellationToken);
 
-                return Failure(
-                    "RESERVATION_EXPIRED",
-                    "The reservation has expired and cannot be changed.",
-                    ErrorType.Conflict);
+                return Result<ReservationResponseDto>.Failure(
+                    new Error(
+                        "RESERVATION_EXPIRED",
+                        "The reservation has expired and cannot be changed.",
+                        ErrorType.Conflict));
             }
 
             if (confirm)
@@ -402,24 +413,16 @@ public sealed class ReservationService : IReservationService
         {
             await _unitOfWork.RollbackAsync(CancellationToken.None);
 
-            return Failure(
-                exception.Code.ToUpperInvariant(),
-                exception.Message,
-                ErrorType.Conflict);
+            return Result<ReservationResponseDto>.Failure(
+                new Error(
+                    exception.Code.ToUpperInvariant(),
+                    exception.Message,
+                    ErrorType.Conflict));
         }
         catch
         {
             await _unitOfWork.RollbackAsync(CancellationToken.None);
             throw;
         }
-    }
-
-    private static Result<ReservationResponseDto> Failure(
-        string code,
-        string message,
-        ErrorType type)
-    {
-        return Result<ReservationResponseDto>.Failure(
-            new Error(code, message, type));
     }
 }

@@ -3,5 +3,6 @@
   <Folder Name="/Tests/">
     <Project Path="src/Tests/UnitTests/UltracarInventoryApi.UnitTests.csproj" />
     <Project Path="src/Tests/IntegrationTests/UltracarInventoryApi.IntegrationTests.csproj" />
+    <Project Path="src/Tests/PerformanceTests/UltracarInventoryApi.PerformanceTests.csproj" />
   </Folder>
 </Solution>
