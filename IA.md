@@ -4,11 +4,13 @@
 
 ## Onde foi utilizada:
 
-- Utilizei a IA como uma parceira no desenvolvimento, para esclarecer dúvidas técnicas, gerar trechos repetitivos e auxiliar na elaboração de testes unitários, de integração e de desempenho, além dos dados de teste. Revisei e adaptei as sugestões incorporadas ao projeto. As decisões técnicas e a validação da solução ficaram sob minha responsabilidade.
+- Utilizei a IA como uma parceira no desenvolvimento, para esclarecer dúvidas técnicas, gerar trechos de codigo repetitivos, gerar documentação, auxiliar na elaboração de testes unitários, de integração e de desempenho, além dos dados de teste. Revisei e adaptei as sugestões incorporadas ao projeto. As decisões técnicas e a validação da solução ficaram sob minha responsabilidade.
 
 # Resumo:
 
 - Duvidas em geral.
+
+- Geração de documentação
 
 - Ajudar na geração de testes unitarios, teste de carga e teste de integração e os seeds para fazer o teste.
 

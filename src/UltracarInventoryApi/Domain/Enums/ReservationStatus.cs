@@ -1,10 +1,9 @@
-namespace UltracarInventoryApi.Domain.Enums
+namespace UltracarInventoryApi.Domain.Enums;
+
+public enum ReservationStatus
 {
-    public enum ReservationStatus
-    {
-        Active = 1,
-        Confirmed = 2,
-        Cancelled = 3,
-        Expired = 4
-    }
+    Active = 1,
+    Confirmed = 2,
+    Cancelled = 3,
+    Expired = 4
 }
