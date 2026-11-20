@@ -4,27 +4,56 @@ API para consulta de peças e gerenciamento de reservas de estoque por oficina, 
 
 # Como executar
 
-Pré-requisitos: Docker com suporte a containers Linux e Docker Compose.
+Pré-requisitos: Docker com suporte a containers Linux e Docker Compose. Os comandos abaixo devem ser executados pelo Bash/WSL.
 
-A partir da raiz do repositório, acesse a pasta da API:
-cd src/UltracarInventoryApi
-Na primeira execução, copie .env.example para .env e preencha POSTGRES_PASSWORD:
-cp .env.example .env
-Depois dessa configuração, suba a API e o PostgreSQL com um comando:
+Na primeira execução, prepare o banco com os scripts da pasta `database-scripts`, na raiz do repositório, antes de iniciar a API. O Compose não executa esses scripts automaticamente.
 
-- docker compose up --build -d
+1. A partir da raiz do repositório, acesse a pasta da API e crie o arquivo de configuração:
+
+   ```sh
+   cd src/UltracarInventoryApi
+   cp .env.example .env
+   ```
+
+   No `.env`, preencha `POSTGRES_PASSWORD` e configure `POSTGRES_DB=UltracarInventory`, nome exigido pelo seed. Se o `.env` já existir, mantenha-o e confira esses valores.
+
+2. Suba somente o PostgreSQL e aguarde o health check indicar que está pronto:
+
+   ```sh
+   docker compose up -d --wait postgres
+   ```
+
+3. Crie as tabelas, os índices e as restrições com o script de schema:
+
+   ```sh
+   docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../../database-scripts/01-schema.sql
+   ```
+
+4. Execute o seed para cadastrar os dados de exemplo:
+
+   ```sh
+   docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../../database-scripts/02-seed.sql
+   ```
+
+   O seed de 2% gera dados para 50 oficinas: 4.000 peças, 4.000 reservas históricas e 40.000 itens de reserva.
+
+5. Depois que os dois scripts terminarem sem erros, suba a API:
+
+   ```sh
+   docker compose up --build -d api
+   ```
+
+Execute o schema apenas em um banco sem as tabelas da aplicação e o seed apenas com essas tabelas vazias. Se o schema já tiver sido aplicado, pule a etapa 3. Se o banco já estiver populado, pule também a etapa 4. Não é necessário repetir os scripts ao reiniciar os containers.
 
 - API: http://localhost:5087
 - Documentação interativa: http://localhost:5087/scalar/v1
 - PostgreSQL: localhost:5433
 
-Inicialização do banco: atualmente, o Compose não aplica o schema automaticamente. Em um banco novo, após subir os containers, execute pelo Bash/WSL:
-docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ../Tests/IntegrationTests/Base/DatabaseSchema.sql
-Esse script cria as tabelas e os índices, sem cadastrar peças. Execute-o apenas na inicialização de um banco vazio.
-
 Para encerrar os serviços, preservando os dados:
 
-- docker compose down
+```sh
+docker compose down
+```
 
 ## DECISÕES E TRADE-OFFS
 

@@ -1,26 +1,3 @@
-# Testes
-Os projetos são separados. Unitários e integração referenciam a API; desempenho usa HTTP real:
-
-```text
-Tests/
-├── UnitTests/
-│   ├── Application/
-│   ├── Common/
-│   ├── Domain/
-│   ├── Presentation/
-│   └── UltracarInventoryApi.UnitTests.csproj
-├── IntegrationTests/
-│   ├── Application/Reservation/CreateReservation/
-│   │   ├── CreateReservationConcurrencyTest.cs
-│   │   └── CreateReservationConcurrencyTestFixture.cs
-│   ├── Base/
-│   │   ├── BaseFixture.cs
-│   │   ├── DatabaseSchema.sql
-│   │   └── InventoryApiFactory.cs
-│   ├── xunit.runner.json
-│   └── UltracarInventoryApi.IntegrationTests.csproj
-└── README.md
-```
 ## Executar os testes unitários
 
 ```sh
